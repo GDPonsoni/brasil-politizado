@@ -89,7 +89,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT vu.ano, vu.turno, vu.cd_cargo, cc.sg_uf, SUM(vu.votos) AS total
     FROM votacao_uf vu
-    JOIN candidatura cc ON cc.sq_candidato = vu.sq_candidato AND cc.turno = vu.turno
+    JOIN candidatura cc ON cc.ano = vu.ano AND cc.sq_candidato = vu.sq_candidato AND cc.turno = vu.turno
     GROUP BY vu.ano, vu.turno, vu.cd_cargo, cc.sg_uf
 ) tot ON tot.ano = c.ano AND tot.turno = c.turno AND tot.cd_cargo = c.cd_cargo AND tot.sg_uf = c.sg_uf
 LEFT JOIN fonte fv ON fv.id = v.fonte_id
@@ -111,7 +111,7 @@ def resultado_presidente(ano: int) -> pd.DataFrame:
                f.arquivo AS fonte_arquivo, c.linha_fonte, f.url AS fonte_url
         FROM candidatura c
         JOIN fonte f ON f.id = c.fonte_id
-        JOIN votacao_uf v ON v.sq_candidato = c.sq_candidato AND v.turno = c.turno AND v.cd_cargo = c.cd_cargo
+        JOIN votacao_uf v ON v.ano = c.ano AND v.sq_candidato = c.sq_candidato AND v.turno = c.turno AND v.cd_cargo = c.cd_cargo
         WHERE c.ano = ? AND c.cd_cargo = 1
         GROUP BY c.turno, c.sq_candidato
         ORDER BY c.turno, votos DESC
@@ -130,7 +130,7 @@ def presidente_por_uf(ano: int, turno: int) -> pd.DataFrame:
         FROM votacao_uf v
         JOIN uf u ON u.sigla = v.sg_uf
         JOIN fonte f ON f.id = v.fonte_id
-        JOIN candidatura c ON c.sq_candidato = v.sq_candidato AND c.turno = v.turno AND c.cd_cargo = v.cd_cargo
+        JOIN candidatura c ON c.ano = v.ano AND c.sq_candidato = v.sq_candidato AND c.turno = v.turno AND c.cd_cargo = v.cd_cargo
         WHERE v.ano = ? AND v.turno = ? AND v.cd_cargo = 1 AND u.regiao IS NOT NULL
         """,
         (ano, turno),
@@ -398,6 +398,14 @@ def secao_sobre() -> None:
         **Como os números foram calculados.** Os votos são os *votos nominais* (no candidato),
         somados a partir dos arquivos por município e zona eleitoral. Percentuais são sobre o total
         de votos nominais do cargo naquele estado e turno.
+
+        **Situação dos candidatos.** É a situação final publicada pelo TSE, já com decisões
+        posteriores à eleição (por exemplo, cassações). Por isso alguns totais podem diferir da
+        apuração da noite da eleição. Eleições suplementares não entram.
+
+        **Quando o TSE não informa quem foi eleito.** Em 2006 o arquivo de candidatos não traz o
+        2º turno de presidente. Nesses casos o eleito é o mais votado no arquivo de votação, e a
+        situação aparece como *calculado pela votação*, com o arquivo de votação como fonte.
         """
     )
     st.markdown("**Arquivos carregados no banco**")
