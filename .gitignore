@@ -1,0 +1,23 @@
+# Dados brutos do TSE e banco gerado (nunca versionar)
+data/raw/
+data/*.db
+data/*.db-*
+*.sqlite
+*.sqlite3
+
+# Segredos
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
