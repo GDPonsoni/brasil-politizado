@@ -10,7 +10,8 @@ import streamlit as st
 from dados import (BANCO, DEP_FEDERAL, GOVERNADOR, PRESIDENTE, SENADOR, consulta, eleitos,
                    presidente_por_uf, resultado_presidente)
 from graficos import CONFIG_PLOTLY, barras_partido, mapa_partidos
-from ui import ajuda, bloco_fontes, eh_celular, fmt_int, fmt_pct, hover_candidatos
+from ui import (ajuda, bloco_fontes, eh_celular, fmt_int, fmt_pct, hover_candidatos, resumo_mais_votados,
+                resumo_partidos)
 
 st.set_page_config(page_title="Brasil Politizado", page_icon="🗳️", layout="wide")
 
@@ -148,6 +149,7 @@ def secao_presidente(ano: int) -> None:
         st.markdown(f"**Mais votado em cada estado — {turno}º turno**", help=ajuda("mais_votado_uf"))
         por_uf = presidente_por_uf(ano, turno)
         mapa_clicavel(por_uf, f"mapa_presidente_{ano}_{turno}")
+        st.caption(resumo_mais_votados(por_uf, turno))
     with col_tab:
         st.markdown(f"**Resultado nacional — {turno}º turno**")
         t = res[res["turno"] == turno].copy()
@@ -182,6 +184,7 @@ def secao_governadores(ano: int) -> None:
         st.markdown("**Partido do governador eleito em cada estado**",
                     help="Passe o mouse sobre um estado para ver o governador, os votos e a fonte.")
         mapa_clicavel(gov, f"mapa_governadores_{ano}")
+        st.caption(resumo_partidos(gov["sg_partido"].value_counts(), ("governador", "governadores"), ano))
     with col_resumo:
         st.markdown("**Governadores por partido**")
         st.plotly_chart(barras_partido(gov["sg_partido"].value_counts(), ("governador", "governadores"), nomes_partidos(gov)),
@@ -240,6 +243,8 @@ def secao_legislativo(ano: int, cargo: int, rotulo: tuple[str, str]) -> None:
         st.markdown("**Cadeiras por partido**", help="Passe o mouse sobre uma barra para ver o nome do partido.")
         st.plotly_chart(barras_partido(df["sg_partido"].value_counts(), rotulo, nomes),
                         width="stretch", config=CONFIG_PLOTLY)
+        recorte = f" ({estado})" if estado != "Todos" else (f" (região {regiao})" if regiao != "Todas" else "")
+        st.caption(resumo_partidos(df["sg_partido"].value_counts(), rotulo, ano, recorte))
     with col_tab:
         busca = st.text_input("Buscar por nome ou partido", key=f"busca_{cargo}_{ano}", placeholder="ex.: Tiririca, PSOL",
                               help="Procura no nome de urna, no nome completo ou na sigla do partido.")

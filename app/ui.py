@@ -69,6 +69,31 @@ def fmt_pct(p) -> str:
     return "—" if pd.isna(p) else f"{p * 100:.1f}%".replace(".", ",")
 
 
+def lista_natural(itens: list[str]) -> str:
+    """['a', 'b', 'c'] -> 'a, b e c'"""
+    return itens[0] if len(itens) == 1 else ", ".join(itens[:-1]) + " e " + itens[-1]
+
+
+def resumo_partidos(contagem: pd.Series, rotulo: tuple[str, str], ano: int, recorte: str = "") -> str:
+    """Resumo em texto de um gráfico de cadeiras por partido (alternativa ao gráfico para leitores de tela)."""
+    contagem = contagem.sort_values(ascending=False)
+    total, n_partidos = int(contagem.sum()), len(contagem)
+    eleitos = rotulo[0] if total == 1 else rotulo[1]
+    partidos = "partido elegeu" if n_partidos == 1 else "partidos elegeram"
+    maiores = [f"{p} ({n})" for p, n in contagem.head(4).items()]
+    texto = f"Em {ano}{recorte}, {n_partidos} {partidos} {total} {eleitos}."
+    if n_partidos > 1:
+        texto += f" Os que mais elegeram: {lista_natural(maiores)}."
+    return texto
+
+
+def resumo_mais_votados(por_uf: pd.DataFrame, turno: int) -> str:
+    """Resumo em texto do mapa de presidente: em quantos estados cada candidato foi o mais votado."""
+    contagem = por_uf.groupby(["nome_exibicao", "sg_partido"]).size().sort_values(ascending=False)
+    partes = [f"{nome} ({partido}) em {n} estado{'s' if n != 1 else ''}" for (nome, partido), n in contagem.items()]
+    return f"No {turno}º turno, foi o mais votado: {lista_natural(partes)}."
+
+
 def _texto_hover(linha: pd.Series) -> str:
     votos = f"{fmt_int(linha['votos'])} votos · {fmt_pct(linha['pct'])} dos nominais"
     if "turno" in linha and pd.notna(linha["turno"]):

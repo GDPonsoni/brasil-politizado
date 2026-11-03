@@ -13,9 +13,17 @@ NÃO implementar as fases 2, 3 ou futuras (composição ao longo do mandato, fin
 - Streamlit na interface (sem front-end separado, sem HTML/JS à mão).
 
 ## Prioridades inegociáveis
-1. Usabilidade e visual vêm primeiro: interface agradável, bonita, fácil e responsiva.
+1. Usabilidade, acessibilidade e visual vêm primeiro: interface simples, limpa, bonita e responsiva,
+   com polimento (tooltips explicativos, feedback de carregamento, estados vazios claros).
 2. Rastreabilidade: todo dado exibido mostra de onde veio (fonte, arquivo, lugar).
 3. Rodar 100% local por enquanto; nada de hospedagem.
+
+## Acessibilidade (checklist para toda tela nova)
+- Nada depende só de cor: mapa leva a sigla do partido escrita; gráfico tem resumo em texto e tabela.
+- Paletas de gráfico validadas para daltonismo nos dois temas; tema escuro tem cores próprias.
+- Contraste mínimo 4,5:1 para texto (WCAG AA), inclusive rótulos sobre o mapa.
+- Tudo que se faz com o mouse também se faz pelo teclado (ex.: clique no mapa = seletor de estado).
+- Termos técnicos explicados em tooltip (glossário em app/ui.py).
 
 ## Método de trabalho
 Vibe coding: eu guio e aprovo, você implementa. Sempre proponha um plano antes de gerar código em etapas novas. Faça mudanças em passos pequenos e me explique as decisões em português.
