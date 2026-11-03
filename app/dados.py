@@ -83,7 +83,7 @@ def eleitos(ano: int, cargo: int) -> pd.DataFrame:
 def resultado_presidente(ano: int) -> pd.DataFrame:
     return consulta(
         """
-        SELECT c.turno, c.nome_urna, c.sg_partido, c.situacao_turno, SUM(v.votos) AS votos,
+        SELECT c.turno, c.nome_urna, c.nome, c.sg_partido, c.nm_partido, c.situacao_turno, SUM(v.votos) AS votos,
                f.arquivo AS fonte_arquivo, c.linha_fonte, f.url AS fonte_url
         FROM candidatura c
         JOIN fonte f ON f.id = c.fonte_id
@@ -100,7 +100,7 @@ def presidente_por_uf(ano: int, turno: int) -> pd.DataFrame:
     """Candidato mais votado em cada UF no turno escolhido."""
     df = consulta(
         """
-        SELECT v.sg_uf, u.nome AS estado, c.nome_urna, c.sg_partido, v.votos,
+        SELECT v.sg_uf, u.nome AS estado, v.turno, c.nome_urna, c.nome, c.sg_partido, c.nm_partido, v.votos,
                SUM(v.votos) OVER (PARTITION BY v.sg_uf) AS total,
                f.arquivo AS fonte_arquivo, f.url AS fonte_url
         FROM votacao_uf v

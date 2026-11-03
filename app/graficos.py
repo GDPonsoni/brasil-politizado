@@ -45,7 +45,8 @@ def mapa_partidos(df: pd.DataFrame, hover: list[str]) -> go.Figure:
             colorscale=[[0, cor], [1, cor]], showscale=False,
             marker_line_color="#FAFAF7", marker_line_width=1.5,
             name=nome, showlegend=True,
-            customdata=grupo["hover"], hovertemplate="%{customdata}<extra></extra>",
+            # customdata leva a sigla da UF, usada para identificar o estado clicado
+            text=grupo["hover"], customdata=grupo["sg_uf"], hovertemplate="%{text}<extra></extra>",
         ))
     # estados grandes: rótulo no centro; pequenos: rótulo no mar, ligado por uma linha-guia
     no_lugar = df[~df["sg_uf"].isin(ROTULOS_FORA)]
@@ -74,27 +75,38 @@ def mapa_partidos(df: pd.DataFrame, hover: list[str]) -> go.Figure:
         height=560, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1, x=0, bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COR_TEXTO_SECUNDARIO)),
-        hoverlabel=dict(bgcolor="white", font_color=COR_TEXTO, bordercolor="#d6d4cc"),
+        hoverlabel=dict(bgcolor="white", font_color=COR_TEXTO, bordercolor="#d6d4cc", align="left"),
         dragmode=False,
     )
     return fig
 
 
-def barras_partido(contagem: pd.Series, rotulo: str) -> go.Figure:
-    """Barras horizontais de cadeiras por partido (uma série só: uma cor só)."""
+def barras_partido(contagem: pd.Series, rotulo: tuple[str, str], nomes: dict[str, str] | None = None) -> go.Figure:
+    """Barras horizontais de cadeiras por partido (uma série só: uma cor só).
+
+    `rotulo` é (singular, plural), ex.: ("governador", "governadores"); `nomes` mapeia
+    sigla -> nome completo do partido, mostrado no tooltip."""
     contagem = contagem.sort_values()
+    nomes = nomes or {}
+    total = contagem.sum()
+    hover = [
+        f"<b>{sigla}</b><br><span style='font-size:11px;opacity:.75'>{nomes.get(sigla, '')}</span><br>"
+        f"{n} {rotulo[0] if n == 1 else rotulo[1]} · " + f"{n / total * 100:.1f}".replace(".", ",") + "% do total"
+        for sigla, n in contagem.items()
+    ]
     fig = go.Figure(go.Bar(
         x=contagem.values, y=contagem.index, orientation="h",
         marker=dict(color=COR_BARRA, cornerradius=4), width=0.7,
         text=contagem.values, textposition="outside", cliponaxis=False,
         textfont=dict(color=COR_TEXTO_SECUNDARIO, size=11),
-        hovertemplate="<b>%{y}</b><br>%{x} " + rotulo + "<extra></extra>",
+        customdata=hover, hovertemplate="%{customdata}<extra></extra>",
     ))
     fig.update_layout(
         height=max(260, 22 * len(contagem) + 40), margin=dict(l=0, r=30, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(visible=False), yaxis=dict(tickfont=dict(color=COR_TEXTO, size=12)),
         bargap=0.25, dragmode=False,
+        hoverlabel=dict(bgcolor="white", font_color=COR_TEXTO, bordercolor="#d6d4cc", align="left"),
     )
     return fig
 
