@@ -59,10 +59,10 @@ def baixar(url: str, destino: Path) -> None:
         temporario.rename(destino)
 
 
-def extrair(zip_path: Path, pasta: Path) -> list[str]:
-    pasta.mkdir(parents=True, exist_ok=True)
+def listar_arquivos(zip_path: Path) -> list[str]:
+    """Os zips não são extraídos: montar_banco.py lê os CSVs direto de dentro deles.
+    Extraídos, os arquivos de votação de 2002 a 2022 passam de 25 GB; compactados, ~1,8 GB."""
     with zipfile.ZipFile(zip_path) as z:
-        z.extractall(pasta)
         return sorted(n for n in z.namelist() if not n.endswith("/"))
 
 
@@ -90,21 +90,24 @@ def main() -> None:
             print(f"[{ano}] {CONJUNTOS[conjunto]}")
             print(f"    fonte: {url}")
 
+            anterior = registro.get(zip_path.name, {})
             if zip_path.exists() and not args.forcar:
                 print(f"    já existe: {zip_path.relative_to(RAIZ)} (use --forcar para baixar de novo)")
+                baixado_em = anterior.get("baixado_em")
             else:
                 baixar(url, zip_path)
+                baixado_em = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-            pasta_extraida = PASTA_RAW / f"{conjunto}_{ano}"
-            arquivos = extrair(zip_path, pasta_extraida)
-            print(f"    extraído em {pasta_extraida.relative_to(RAIZ)}/ ({len(arquivos)} arquivos)")
+            arquivos = listar_arquivos(zip_path)
+            print(f"    salvo em {zip_path.relative_to(RAIZ)} ({len(arquivos)} arquivos, "
+                  f"{zip_path.stat().st_size / 1e6:.1f} MB)")
 
             registro[zip_path.name] = {
                 "conjunto": conjunto,
                 "descricao": CONJUNTOS[conjunto],
                 "ano": ano,
                 "url": url,
-                "baixado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "baixado_em": baixado_em,
                 "tamanho_bytes": zip_path.stat().st_size,
                 "sha256": sha256(zip_path),
                 "arquivos": arquivos,
