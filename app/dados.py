@@ -19,19 +19,19 @@ def conexao() -> sqlite3.Connection:
     return sqlite3.connect(f"file:{BANCO}?mode=ro", uri=True, check_same_thread=False)
 
 
-@st.cache_data
+@st.cache_data(show_spinner="Consultando os dados do TSE…")
 def consulta(sql: str, params: tuple = ()) -> pd.DataFrame:
     # escalares numpy (ex.: int64 vindo de um DataFrame) iriam para o SQLite como BLOB e não casariam
     params = tuple(p.item() if hasattr(p, "item") else p for p in params)
     return pd.read_sql_query(sql, conexao(), params=params)
 
 
-@st.cache_data
+@st.cache_data(show_spinner="Carregando o mapa do Brasil…")
 def geojson_ufs() -> dict:
     return json.loads(GEOJSON.read_text(encoding="utf-8"))
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def centroides() -> pd.DataFrame:
     """Centro aproximado do maior polígono de cada UF, para posicionar os rótulos."""
     linhas = []

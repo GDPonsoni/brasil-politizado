@@ -25,6 +25,11 @@ COL_SITUACAO = st.column_config.TextColumn("Situação", help=ajuda("situacao", 
 COL_PARTIDO = st.column_config.TextColumn("Partido", help="Sigla do partido pelo qual o candidato concorreu.")
 
 
+def aviso_sem_dados(o_que: str, ano: int) -> None:
+    st.info(f"O banco não tem dados de {o_que} para {ano}. Baixe essa eleição com "
+            f"`python scripts/baixar_dados.py --anos {ano}` e monte o banco de novo.", icon=":material/info:")
+
+
 def nomes_partidos(df: pd.DataFrame) -> dict[str, str]:
     return dict(zip(df["sg_partido"], df["nm_partido"]))
 
@@ -34,7 +39,7 @@ def nomes_partidos(df: pd.DataFrame) -> dict[str, str]:
 def secao_presidente(ano: int) -> None:
     res = resultado_presidente(ano)
     if res.empty:
-        st.info("Sem dados de presidente para este ano.")
+        aviso_sem_dados("presidente", ano)
         return
     ultimo_turno = int(res["turno"].max())
     eleito = eleitos(ano, PRESIDENTE).iloc[0]
@@ -84,7 +89,7 @@ def secao_presidente(ano: int) -> None:
 def secao_governadores(ano: int) -> None:
     gov = eleitos(ano, GOVERNADOR)
     if gov.empty:
-        st.info("Sem dados de governadores para este ano.")
+        aviso_sem_dados("governadores", ano)
         return
 
     col_mapa, col_resumo = st.columns([3, 2], gap="large")
@@ -123,7 +128,7 @@ def secao_legislativo(ano: int, cargo: int, rotulo: tuple[str, str]) -> None:
     """`rotulo` é (singular, plural) do cargo, ex.: ("senador", "senadores")."""
     df = eleitos(ano, cargo)
     if df.empty:
-        st.info(f"Sem dados de {rotulo[1]} para este ano.")
+        aviso_sem_dados(rotulo[1], ano)
         return
     nomes = nomes_partidos(df)
     sobre_casa = ajuda("senado" if cargo == SENADOR else "camara")
@@ -153,20 +158,25 @@ def secao_legislativo(ano: int, cargo: int, rotulo: tuple[str, str]) -> None:
                               help="Procura no nome de urna, no nome completo ou na sigla do partido.")
         tabela = df
         if busca:
-            alvo = busca.upper()
+            alvo = busca.strip().upper()
             tabela = df[df["nome_urna"].str.contains(alvo, regex=False) | df["nome"].str.contains(alvo, regex=False)
                         | (df["sg_partido"].str.upper() == alvo)]
-        st.dataframe(
-            tabela.sort_values("votos", ascending=False)[
-                ["nome_urna", "sg_partido", "sg_uf", "votos", "pct", "situacao_turno", "fonte_arquivo", "linha_fonte"]],
-            hide_index=True, width="stretch", height=480,
-            column_config={
-                "nome_urna": st.column_config.TextColumn("Nome na urna", help="Nome usado na urna."),
-                "sg_partido": COL_PARTIDO, "sg_uf": "UF", "votos": COL_VOTOS,
-                "pct": st.column_config.NumberColumn("% do estado", format="percent", help=ajuda("pct_nominais")),
-                "situacao_turno": COL_SITUACAO, **COL_FONTE,
-            },
-        )
+            st.caption(f"{len(tabela)} de {len(df)} eleitos correspondem à busca.")
+        if tabela.empty:
+            st.info(f"Nenhum eleito encontrado para “{busca.strip()}” neste recorte. Tente parte do nome, "
+                    "a sigla do partido ou limpar os filtros de região e estado.", icon=":material/search_off:")
+        else:
+            st.dataframe(
+                tabela.sort_values("votos", ascending=False)[
+                    ["nome_urna", "sg_partido", "sg_uf", "votos", "pct", "situacao_turno", "fonte_arquivo", "linha_fonte"]],
+                hide_index=True, width="stretch", height=480,
+                column_config={
+                    "nome_urna": st.column_config.TextColumn("Nome na urna", help="Nome usado na urna."),
+                    "sg_partido": COL_PARTIDO, "sg_uf": "UF", "votos": COL_VOTOS,
+                    "pct": st.column_config.NumberColumn("% do estado", format="percent", help=ajuda("pct_nominais")),
+                    "situacao_turno": COL_SITUACAO, **COL_FONTE,
+                },
+            )
     bloco_fontes(df, colunas=(("fonte_arquivo", "fonte_url"), ("fonte_votos_arquivo", "fonte_votos_url")))
 
 
@@ -212,8 +222,11 @@ def secao_sobre() -> None:
 def main() -> None:
     if not BANCO.exists():
         st.title("Brasil Politizado")
-        st.warning("O banco ainda não foi gerado. Rode no terminal:")
+        st.info("O banco de dados ainda não foi gerado. São dois passos no terminal, na pasta do projeto: "
+                "o primeiro baixa os arquivos do TSE e o segundo monta o banco (cerca de 2 minutos por eleição "
+                "com votação).", icon=":material/database:")
         st.code("python scripts/baixar_dados.py\npython scripts/montar_banco.py", language="bash")
+        st.caption("Depois, recarregue esta página.")
         st.stop()
 
     anos = consulta("SELECT DISTINCT ano FROM candidatura ORDER BY ano")["ano"].tolist()
