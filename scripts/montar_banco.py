@@ -1,4 +1,4 @@
-"""Lê os CSVs do TSE em data/raw e monta o banco SQLite data/brasil.db.
+"""Lê os CSVs do TSE (direto de dentro dos zips em data/raw) e monta o banco SQLite data/brasil.db.
 
 Uso:
     python scripts/montar_banco.py
@@ -15,6 +15,7 @@ Modelo (eixos: ano e estado):
 
 import json
 import sqlite3
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -49,7 +50,7 @@ UFS = [
 ESQUEMA = """
 CREATE TABLE fonte (
     id          INTEGER PRIMARY KEY,
-    arquivo     TEXT NOT NULL UNIQUE,  -- caminho do CSV dentro de data/raw
+    arquivo     TEXT NOT NULL UNIQUE,  -- <zip>/<csv dentro do zip>, em data/raw
     zip         TEXT NOT NULL,
     conjunto    TEXT NOT NULL,
     descricao   TEXT,
@@ -85,7 +86,7 @@ CREATE TABLE candidatura (
     situacao_turno        TEXT,
     eleito                INTEGER NOT NULL,
     fonte_id              INTEGER NOT NULL REFERENCES fonte(id),
-    linha_fonte           INTEGER NOT NULL  -- linha no CSV (1 = cabeçalho)
+    linha_fonte           INTEGER  -- linha no CSV (1 = cabeçalho); nulo se calculado pela votação
 );
 CREATE INDEX ix_candidatura_eixos ON candidatura (ano, cd_cargo, sg_uf);
 CREATE INDEX ix_candidatura_sq ON candidatura (sq_candidato);
@@ -103,15 +104,21 @@ CREATE TABLE votacao_uf (
 """
 
 COLS_CAND = [
-    "ANO_ELEICAO", "NR_TURNO", "CD_CARGO", "SG_UF", "SQ_CANDIDATO", "NR_CANDIDATO",
+    "ANO_ELEICAO", "NM_TIPO_ELEICAO", "NR_TURNO", "CD_CARGO", "SG_UF", "SQ_CANDIDATO", "NR_CANDIDATO",
     "NM_CANDIDATO", "NM_URNA_CANDIDATO", "NR_PARTIDO", "SG_PARTIDO", "NM_PARTIDO",
     "NM_COLIGACAO", "DS_COMPOSICAO_COLIGACAO", "DS_SITUACAO_CANDIDATURA", "DS_SIT_TOT_TURNO",
 ]
-COLS_VOTOS = ["ANO_ELEICAO", "NR_TURNO", "CD_CARGO", "SG_UF", "SQ_CANDIDATO", "QT_VOTOS_NOMINAIS"]
+COLS_VOTOS = ["ANO_ELEICAO", "NM_TIPO_ELEICAO", "NR_TURNO", "CD_CARGO", "SG_UF", "SQ_CANDIDATO", "QT_VOTOS_NOMINAIS"]
 
 
-def ler_csv_tse(caminho: Path, colunas: list[str], **kwargs):
-    return pd.read_csv(caminho, sep=";", encoding="latin1", dtype=str, usecols=colunas, **kwargs)
+def ler_csv_tse(arquivo, colunas: list[str], **kwargs):
+    return pd.read_csv(arquivo, sep=";", encoding="latin1", dtype=str, usecols=colunas, **kwargs)
+
+
+def so_ordinaria(df: pd.DataFrame) -> pd.Series:
+    """Alguns arquivos trazem também eleições suplementares (ex.: governador do AM em 2017 no
+    arquivo de 2014). O MVP mostra só a eleição geral; o código do tipo muda entre anos, o nome não."""
+    return ~df["NM_TIPO_ELEICAO"].str.upper().str.contains("SUPLEMENTAR", na=False)
 
 
 def csvs_do_zip(info: dict) -> list[str]:
@@ -123,17 +130,17 @@ def registrar_fonte(con: sqlite3.Connection, zip_nome: str, info: dict, csv: str
     cur = con.execute(
         "INSERT INTO fonte (arquivo, zip, conjunto, descricao, ano, url, baixado_em, sha256_zip)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (f"{Path(zip_nome).stem}/{csv}", zip_nome, info["conjunto"], info.get("descricao"),
+        (f"{zip_nome}/{csv}", zip_nome, info["conjunto"], info.get("descricao"),
          info["ano"], info["url"], info.get("baixado_em"), info.get("sha256")),
     )
     return cur.lastrowid
 
 
-def carregar_candidaturas(con: sqlite3.Connection, caminho: Path, fonte_id: int) -> int:
-    df = ler_csv_tse(caminho, COLS_CAND)
+def carregar_candidaturas(con: sqlite3.Connection, arquivo, fonte_id: int) -> int:
+    df = ler_csv_tse(arquivo, COLS_CAND)
     df["linha_fonte"] = df.index + 2  # +1 do cabeçalho, +1 porque a contagem começa em 1
     df["CD_CARGO"] = df["CD_CARGO"].astype(int)
-    df = df[df["CD_CARGO"].isin(CARGOS)]
+    df = df[df["CD_CARGO"].isin(CARGOS) & so_ordinaria(df)]
     if df.empty:
         return 0
 
@@ -162,12 +169,12 @@ def carregar_candidaturas(con: sqlite3.Connection, caminho: Path, fonte_id: int)
     return len(saida)
 
 
-def carregar_votacao(con: sqlite3.Connection, caminho: Path, fonte_id: int) -> int:
+def carregar_votacao(con: sqlite3.Connection, arquivo, fonte_id: int) -> int:
     """Soma os votos de município/zona por candidato, turno e UF, lendo em blocos."""
     parciais = []
-    for bloco in ler_csv_tse(caminho, COLS_VOTOS, chunksize=500_000):
+    for bloco in ler_csv_tse(arquivo, COLS_VOTOS, chunksize=500_000):
         bloco["CD_CARGO"] = bloco["CD_CARGO"].astype(int)
-        bloco = bloco[bloco["CD_CARGO"].isin(CARGOS)]
+        bloco = bloco[bloco["CD_CARGO"].isin(CARGOS) & so_ordinaria(bloco)]
         bloco["QT_VOTOS_NOMINAIS"] = bloco["QT_VOTOS_NOMINAIS"].astype(int)
         parciais.append(
             bloco.groupby(["ANO_ELEICAO", "NR_TURNO", "CD_CARGO", "SG_UF", "SQ_CANDIDATO"])
@@ -183,6 +190,48 @@ def carregar_votacao(con: sqlite3.Connection, caminho: Path, fonte_id: int) -> i
     total["fonte_id"] = fonte_id
     total.to_sql("votacao_uf", con, if_exists="append", index=False)
     return len(total)
+
+
+SQL_TURNOS_SEM_CANDIDATURA = """
+-- Turnos que têm votação mas não têm candidatura (ex.: 2º turno de presidente em 2006, ausente
+-- do consulta_cand). Copia os dados do candidato do turno anterior e aponta a fonte para o
+-- arquivo de votação, deixando claro na situação que ela foi calculada, não declarada pelo TSE.
+INSERT INTO candidatura (ano, turno, cd_cargo, cargo, sg_uf, sq_candidato, nr_candidato, nome, nome_urna,
+    nr_partido, sg_partido, nm_partido, coligacao, composicao_coligacao, situacao_candidatura,
+    situacao_turno, eleito, fonte_id, linha_fonte)
+SELECT c.ano, v.turno, c.cd_cargo, c.cargo, c.sg_uf, c.sq_candidato, c.nr_candidato, c.nome, c.nome_urna,
+    c.nr_partido, c.sg_partido, c.nm_partido, c.coligacao, c.composicao_coligacao, c.situacao_candidatura,
+    'NÃO ELEITO (calculado pela votação)', 0, v.fonte_id, NULL
+FROM (SELECT ano, turno, cd_cargo, sq_candidato, MIN(fonte_id) AS fonte_id
+      FROM votacao_uf GROUP BY ano, turno, cd_cargo, sq_candidato) v
+JOIN candidatura c ON c.ano = v.ano AND c.cd_cargo = v.cd_cargo AND c.sq_candidato = v.sq_candidato
+                  AND c.turno = v.turno - 1
+WHERE NOT EXISTS (SELECT 1 FROM candidatura x WHERE x.ano = v.ano AND x.turno = v.turno
+                  AND x.cd_cargo = v.cd_cargo AND x.sq_candidato = v.sq_candidato);
+"""
+
+SQL_ELEITO_CALCULADO = """
+-- Nos turnos calculados acima, o mais votado do turno em cada UF é o eleito
+UPDATE candidatura SET eleito = 1, situacao_turno = 'ELEITO (calculado pela votação)'
+WHERE linha_fonte IS NULL AND id IN (
+    SELECT id FROM (
+        SELECT c.id, RANK() OVER (PARTITION BY c.ano, c.turno, c.cd_cargo, c.sg_uf ORDER BY SUM(v.votos) DESC) AS r
+        FROM candidatura c
+        JOIN votacao_uf v ON v.ano = c.ano AND v.turno = c.turno AND v.cd_cargo = c.cd_cargo
+                         AND v.sq_candidato = c.sq_candidato
+        WHERE c.linha_fonte IS NULL
+        GROUP BY c.id
+    ) WHERE r = 1
+);
+"""
+
+SQL_ELEITO_SO_NO_ULTIMO_TURNO = """
+-- Alguns arquivos marcam o mesmo candidato como eleito no 1º e no 2º turno (ex.: GO 2014)
+UPDATE candidatura SET eleito = 0
+WHERE eleito = 1 AND EXISTS (SELECT 1 FROM candidatura x WHERE x.ano = candidatura.ano
+    AND x.cd_cargo = candidatura.cd_cargo AND x.sq_candidato = candidatura.sq_candidato
+    AND x.turno > candidatura.turno AND x.eleito = 1);
+"""
 
 
 CARREGADORES = {
@@ -205,13 +254,20 @@ def main() -> None:
         carregar = CARREGADORES.get(info["conjunto"])
         if carregar is None:
             continue
-        pasta = PASTA_RAW / Path(zip_nome).stem
         print(f"[{info['ano']}] {info['conjunto']}")
         total = 0
-        for csv in csvs_do_zip(info):
-            fonte_id = registrar_fonte(con, zip_nome, info, csv)
-            total += carregar(con, pasta / csv, fonte_id)
+        # os CSVs são lidos direto de dentro do zip, sem extrair
+        with zipfile.ZipFile(PASTA_RAW / zip_nome) as z:
+            for csv in csvs_do_zip(info):
+                fonte_id = registrar_fonte(con, zip_nome, info, csv)
+                with z.open(csv) as arquivo:
+                    total += carregar(con, arquivo, fonte_id)
         print(f"    {total} registros")
+
+    con.executescript(SQL_TURNOS_SEM_CANDIDATURA + SQL_ELEITO_CALCULADO + SQL_ELEITO_SO_NO_ULTIMO_TURNO)
+    calculados = con.execute("SELECT ano, cargo, sg_uf, turno, nome_urna FROM candidatura WHERE linha_fonte IS NULL AND eleito = 1").fetchall()
+    for linha in calculados:
+        print("    eleito calculado pela votação:", *linha)
 
     con.commit()
     resumo = con.execute(
