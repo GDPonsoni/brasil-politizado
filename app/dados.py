@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from ui import nome_proprio
+
 RAIZ = Path(__file__).resolve().parent.parent
 BANCO = RAIZ / "data" / "brasil.db"
 GEOJSON = Path(__file__).resolve().parent / "assets" / "ufs.geojson"
@@ -74,14 +76,22 @@ ORDER BY c.sg_uf, c.nome_urna
 """
 
 
-def eleitos(ano: int, cargo: int) -> pd.DataFrame:
-    df = consulta(SQL_ELEITOS, (ano, cargo))
-    df["pct"] = df["votos"] / df["total"]
+def com_nomes_legiveis(df: pd.DataFrame) -> pd.DataFrame:
+    """Acrescenta nome e partido em caixa normal para exibição; as colunas originais do TSE
+    (em maiúsculas) continuam no DataFrame e são usadas na busca e nos tooltips."""
+    df["nome_exibicao"] = df["nome_urna"].map(nome_proprio)
+    df["partido_exibicao"] = df["nm_partido"].map(nome_proprio)
     return df
 
 
+def eleitos(ano: int, cargo: int) -> pd.DataFrame:
+    df = consulta(SQL_ELEITOS, (ano, cargo))
+    df["pct"] = df["votos"] / df["total"]
+    return com_nomes_legiveis(df)
+
+
 def resultado_presidente(ano: int) -> pd.DataFrame:
-    return consulta(
+    return com_nomes_legiveis(consulta(
         """
         SELECT c.turno, c.nome_urna, c.nome, c.sg_partido, c.nm_partido, c.situacao_turno, SUM(v.votos) AS votos,
                f.arquivo AS fonte_arquivo, c.linha_fonte, f.url AS fonte_url
@@ -93,7 +103,7 @@ def resultado_presidente(ano: int) -> pd.DataFrame:
         ORDER BY c.turno, votos DESC
         """,
         (ano,),
-    )
+    ))
 
 
 def presidente_por_uf(ano: int, turno: int) -> pd.DataFrame:
@@ -112,4 +122,5 @@ def presidente_por_uf(ano: int, turno: int) -> pd.DataFrame:
         (ano, turno),
     )
     df["pct"] = df["votos"] / df["total"]
-    return df.sort_values("votos", ascending=False).drop_duplicates("sg_uf").sort_values("sg_uf")
+    df = df.sort_values("votos", ascending=False).drop_duplicates("sg_uf").sort_values("sg_uf")
+    return com_nomes_legiveis(df)

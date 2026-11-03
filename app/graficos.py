@@ -25,8 +25,10 @@ def cor_partido(sigla: str) -> str:
     return CORES_PARTIDO.get(sigla, COR_OUTROS)
 
 
-def mapa_partidos(df: pd.DataFrame, hover: list[str]) -> go.Figure:
-    """Mapa do Brasil colorido pelo partido, com a sigla do partido escrita em cada UF."""
+def mapa_partidos(df: pd.DataFrame, hover: list[str], altura: int = 560, destaque: str | None = None) -> go.Figure:
+    """Mapa do Brasil colorido pelo partido, com a sigla do partido escrita em cada UF.
+
+    `destaque` é a sigla de uma UF a contornar (o estado escolhido no Raio-X)."""
     df = df.merge(centroides(), on="sg_uf")
     df["cor"] = df["sg_partido"].map(cor_partido)
     df["hover"] = hover
@@ -45,15 +47,23 @@ def mapa_partidos(df: pd.DataFrame, hover: list[str]) -> go.Figure:
             colorscale=[[0, cor], [1, cor]], showscale=False,
             marker_line_color="#FAFAF7", marker_line_width=1.5,
             name=nome, showlegend=True,
+            # ao clicar, o Plotly esmaeceria os outros estados; mantemos todos visíveis
+            selected=dict(marker=dict(opacity=1)), unselected=dict(marker=dict(opacity=1)),
             # customdata leva a sigla da UF, usada para identificar o estado clicado
             text=grupo["hover"], customdata=grupo["sg_uf"], hovertemplate="%{text}<extra></extra>",
+        ))
+    if destaque in set(df["sg_uf"]):
+        fig.add_trace(go.Choropleth(
+            geojson=geojson_ufs(), locations=[destaque], z=[1], showscale=False, showlegend=False,
+            colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]], hoverinfo="skip",
+            marker_line_color=COR_TEXTO, marker_line_width=3,
         ))
     # estados grandes: rótulo no centro; pequenos: rótulo no mar, ligado por uma linha-guia
     no_lugar = df[~df["sg_uf"].isin(ROTULOS_FORA)]
     fig.add_trace(go.Scattergeo(
         lon=no_lugar["lon"], lat=no_lugar["lat"], mode="text", showlegend=False, hoverinfo="skip",
         text=no_lugar["sg_uf"] + "<br><b>" + no_lugar["sg_partido"] + "</b>",
-        textfont=dict(size=10, color=COR_TEXTO),
+        textfont=dict(size=11, color=COR_TEXTO),
     ))
     fora = df[df["sg_uf"].isin(ROTULOS_FORA)]
     for _, uf in fora.iterrows():
@@ -66,13 +76,13 @@ def mapa_partidos(df: pd.DataFrame, hover: list[str]) -> go.Figure:
         lon=[ROTULOS_FORA[u][0] for u in fora["sg_uf"]], lat=[ROTULOS_FORA[u][1] for u in fora["sg_uf"]],
         mode="text", textposition="middle right", showlegend=False, hoverinfo="skip",
         text=" " + fora["sg_uf"] + " <b>" + fora["sg_partido"] + "</b>",
-        textfont=dict(size=10, color=COR_TEXTO),
+        textfont=dict(size=11, color=COR_TEXTO),
     ))
     # área fixa (e não fitbounds) para os rótulos no mar não serem cortados
     fig.update_geos(visible=False, bgcolor="rgba(0,0,0,0)", projection_type="mercator",
                     lonaxis_range=[-74.5, -26], lataxis_range=[-34, 5.5])
     fig.update_layout(
-        height=560, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor="rgba(0,0,0,0)",
+        height=altura, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1, x=0, bgcolor="rgba(0,0,0,0)",
                     font=dict(color=COR_TEXTO_SECUNDARIO)),
         hoverlabel=dict(bgcolor="white", font_color=COR_TEXTO, bordercolor="#d6d4cc", align="left"),

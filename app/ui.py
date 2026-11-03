@@ -1,5 +1,7 @@
 """Formatação, glossário e blocos de interface reutilizados pelas seções."""
 
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -29,6 +31,32 @@ GLOSSARIO = {
 }
 
 
+PARTICULAS = {"da", "de", "do", "das", "dos", "e", "di", "du"}
+# Siglas que aparecem em nomes de urna e devem ficar em maiúsculas
+SIGLAS_EM_NOMES = {"ACM", "JHC", "II", "III"}
+
+
+def nome_proprio(texto) -> str:
+    """'TIÃO VIANA' -> 'Tião Viana'; 'LULA DA SILVA' -> 'Lula da Silva'; mantém siglas conhecidas."""
+    if not isinstance(texto, str):
+        return texto
+    palavras = []
+    for i, palavra in enumerate(texto.split()):
+        if palavra.upper() in SIGLAS_EM_NOMES:
+            palavras.append(palavra.upper())
+        elif i > 0 and palavra.lower() in PARTICULAS:
+            palavras.append(palavra.lower())
+        else:
+            # capitaliza também depois de apóstrofo e hífen: D'ÁVILA -> D'Ávila, SANTA-RITA -> Santa-Rita
+            palavras.append(re.sub(r"(^|['’-])(\w)", lambda m: m.group(1) + m.group(2).upper(), palavra.lower()))
+    return " ".join(palavras)
+
+
+def eh_celular() -> bool:
+    """Detecção simples pelo navegador, usada só para ajustar alturas de gráficos."""
+    return "Mobi" in (st.context.headers.get("User-Agent") or "")
+
+
 def ajuda(*chaves: str) -> str:
     return "\n\n".join(GLOSSARIO[c] for c in chaves)
 
@@ -51,10 +79,10 @@ def _texto_hover(linha: pd.Series) -> str:
         fonte = f"{linha['fonte_arquivo']} (soma de município/zona)"
     return (
         f"<b>{linha['estado']}</b><br>"
-        f"{linha['nome_urna']} · <b>{linha['sg_partido']}</b><br>"
-        f"<span style='font-size:11px;opacity:.75'>{linha['nm_partido']}</span><br>"
+        f"{linha['nome_exibicao']} · <b>{linha['sg_partido']}</b><br>"
+        f"<span style='font-size:11px;opacity:.75'>{linha['partido_exibicao']}</span><br>"
         f"{votos}<br>"
-        f"<span style='font-size:10px;opacity:.6'>Fonte: {fonte}</span>"
+        f"<span style='font-size:10px;opacity:.6'>Nome no TSE: {linha['nome']}<br>Fonte: {fonte}</span>"
     )
 
 
