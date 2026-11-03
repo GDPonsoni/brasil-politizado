@@ -17,12 +17,14 @@ TEMAS = {
         "outros": "#c9c7bf", "barra": "#0F766E", "fundo": "#FAFAF7",
         "texto": "#1F2933", "texto_secundario": "#52514e",
         "hover_fundo": "#ffffff", "hover_borda": "#d6d4cc",
+        "primaria": "#0F766E", "sombra": "rgb(31 41 51 / .10)",
     },
     "dark": {
         "partidos": {"PT": "#cf3f4f", "PSDB": "#3987e5", "PMDB": "#008300", "MDB": "#008300", "PSB": "#c98500"},
         "outros": "#5c5a55", "barra": "#2BB3A3", "fundo": "#1a1a19",
         "texto": "#ECEDEA", "texto_secundario": "#c3c2b7",
         "hover_fundo": "#262624", "hover_borda": "#3a3a37",
+        "primaria": "#2BB3A3", "sombra": "rgb(0 0 0 / .45)",
     },
 }
 

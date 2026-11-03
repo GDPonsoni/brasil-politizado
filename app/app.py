@@ -4,16 +4,27 @@ Uso:
     streamlit run app/app.py
 """
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
 from dados import (BANCO, DEP_FEDERAL, GOVERNADOR, PRESIDENTE, SENADOR, consulta, eleitos,
                    presidente_por_uf, resultado_presidente)
-from graficos import CONFIG_PLOTLY, barras_partido, mapa_partidos
+from graficos import CONFIG_PLOTLY, barras_partido, mapa_partidos, tema
 from ui import (ajuda, bloco_fontes, eh_celular, fmt_int, fmt_pct, hover_candidatos, resumo_mais_votados,
                 resumo_partidos)
 
-st.set_page_config(page_title="Brasil Politizado", page_icon="🗳️", layout="wide")
+st.set_page_config(page_title="Brasil Politizado", page_icon=":material/how_to_vote:", layout="wide")
+
+ESTILO = Path(__file__).resolve().parent / "estilo.css"
+
+
+def aplicar_estilo() -> None:
+    """Carrega app/estilo.css (só aparência e animação), com as cores do tema ativo."""
+    t = tema()
+    variaveis = f":root {{ --bp-primaria: {t['primaria']}; --bp-sombra: {t['sombra']}; }}"
+    st.html(f"<style>{variaveis}\n{ESTILO.read_text(encoding='utf-8')}</style>")
 
 
 # Colunas comuns às tabelas, com o texto que aparece ao passar o mouse no cabeçalho
@@ -65,8 +76,9 @@ def mapa_clicavel(df: pd.DataFrame, chave: str) -> None:
                     on_select=lambda: ao_clicar_no_mapa(chave), selection_mode="points")
 
 
-def cartao(titulo: str, ajuda_titulo: str | None = None):
-    caixa = st.container(border=True)
+def cartao(chave: str, titulo: str, ajuda_titulo: str | None = None):
+    # a key vira a classe st-key-cartao-<chave>, usada pelo estilo.css para o efeito de hover
+    caixa = st.container(border=True, key=f"cartao-{chave}")
     caixa.caption(titulo, help=ajuda_titulo)
     return caixa
 
@@ -99,19 +111,19 @@ def raio_x_estado(ano: int) -> None:
     pres = presidente_por_uf(ano, turno).query("sg_uf == @uf") if turno else pd.DataFrame()
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1, cartao("Governador eleito"):
+    with c1, cartao("governador", "Governador eleito"):
         for _, g in gov.iterrows():
             st.markdown(f"**{g['nome_exibicao']}** · {g['sg_partido']}")
             st.caption(f"{fmt_pct(g['pct'])} dos votos nominais · {int(g['turno'])}º turno")
-    with c2, cartao(f"Senado · {len(sen)} vaga{'s' if len(sen) != 1 else ''} nesta eleição", ajuda("senado")):
+    with c2, cartao("senado", f"Senado · {len(sen)} vaga{'s' if len(sen) != 1 else ''} nesta eleição", ajuda("senado")):
         for _, s in sen.sort_values("votos", ascending=False).iterrows():
             st.markdown(f"**{s['nome_exibicao']}** · {s['sg_partido']}")
-    with c3, cartao(f"Câmara · {len(dep)} deputados federais", ajuda("camara")):
+    with c3, cartao("camara", f"Câmara · {len(dep)} deputados federais", ajuda("camara")):
         bancadas = dep["sg_partido"].value_counts()
         st.markdown(" · ".join(f"**{p}** {n}" for p, n in bancadas.head(6).items()))
         if len(bancadas) > 6:
             st.caption(f"e mais {len(bancadas) - 6} partidos")
-    with c4, cartao(f"Presidente · mais votado aqui no {turno}º turno", ajuda("mais_votado_uf")):
+    with c4, cartao("presidente", f"Presidente · mais votado aqui no {turno}º turno", ajuda("mais_votado_uf")):
         for _, p in pres.iterrows():
             st.markdown(f"**{p['nome_exibicao']}** · {p['sg_partido']}")
             st.caption(f"{fmt_pct(p['pct'])} dos votos nominais no estado")
@@ -312,6 +324,7 @@ def secao_sobre() -> None:
 # ---------------------------------------------------------------- página
 
 def main() -> None:
+    aplicar_estilo()
     if not BANCO.exists():
         st.title("Brasil Politizado")
         st.info("O banco de dados ainda não foi gerado. São dois passos no terminal, na pasta do projeto: "

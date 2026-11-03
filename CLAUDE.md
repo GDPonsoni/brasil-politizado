@@ -11,6 +11,8 @@ NÃO implementar as fases 2, 3 ou futuras (composição ao longo do mandato, fin
 - Python em tudo.
 - SQLite como banco (arquivo único, sem servidor).
 - Streamlit na interface (sem front-end separado, sem HTML/JS à mão).
+- Exceção aprovada: um único arquivo de CSS, app/estilo.css, só com aparência e animação
+  (sem lógica, sem JavaScript). Respeitar prefers-reduced-motion e manter o foco de teclado visível.
 
 ## Prioridades inegociáveis
 1. Usabilidade, acessibilidade e visual vêm primeiro: interface simples, limpa, bonita e responsiva,
